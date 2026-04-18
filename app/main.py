@@ -1,44 +1,50 @@
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
-from fastapi.middleware.cors import CORSMiddleware
+from flask import Flask, render_template, jsonify
+from flask_cors import CORS
 import os
-from routes import admin, api
+from dotenv import load_dotenv
+from routes.admin_flask import admin_bp
+from routes.api_flask import api_bp
 
-# Initialize FastAPI app
-app = FastAPI(title="Cricket Heroes - Player Dashboard")
+# Load environment variables
+load_dotenv()
 
-# Enable CORS for all origins
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Initialize Flask app
+app = Flask(__name__, template_folder='templates', static_folder='static', static_url_path='/static')
 
-# Mount static files
-static_path = os.path.join(os.path.dirname(__file__), "static")
-app.mount("/static", StaticFiles(directory=static_path), name="static")
+# Enable CORS
+CORS(app)
 
-# Include routers
-app.include_router(admin.router, prefix="/admin", tags=["admin"])
-app.include_router(api.router, prefix="/api", tags=["api"])
+# Register blueprints
+app.register_blueprint(admin_bp, url_prefix='/admin')
+app.register_blueprint(api_bp, url_prefix='/api')
 
 
-@app.get("/dashboard/bbl4", response_class=HTMLResponse)
-async def dashboard():
+@app.route('/dashboard/bbl4')
+def dashboard():
     """Serve the main dashboard page"""
-    with open(os.path.join(os.path.dirname(__file__), "templates/dashboard.html"), "r", encoding="utf-8") as f:
-        return f.read()
+    return render_template('dashboard.html')
 
 
-@app.get("/health")
-async def health_check():
+@app.route('/health')
+def health_check():
     """Health check endpoint"""
-    return {"status": "ok", "message": "Cricket Heroes API is running"}
+    return jsonify({
+        "status": "ok",
+        "message": "Cricket Heroes API is running"
+    })
+
+
+@app.errorhandler(404)
+def not_found(error):
+    """Handle 404 errors"""
+    return jsonify({"status": "error", "detail": "Endpoint not found"}), 404
+
+
+@app.errorhandler(500)
+def server_error(error):
+    """Handle 500 errors"""
+    return jsonify({"status": "error", "detail": "Internal server error"}), 500
 
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    app.run(host="0.0.0.0", port=8000, debug=False)
