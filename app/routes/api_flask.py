@@ -9,7 +9,7 @@ load_dotenv()
 api_bp = Blueprint('api', __name__)
 
 # MongoDB connection
-MONGO_URL = os.getenv("MONGODB_URL", "mongodb+srv://abdulrasheed8223:abdulrash@first.qez08g9.mongodb.net/bbl_season_4")
+MONGO_URL = os.getenv("MONGODB_URL")
 client = MongoClient(MONGO_URL)
 db = client["cricket"]
 players_collection = db["players"]
@@ -143,3 +143,60 @@ def get_current_player_stats():
         
     except Exception as e:
         return jsonify({"status": "error", "detail": f"Error fetching current player stats: {str(e)}"}), 500
+
+
+@api_bp.route("/players-by-category", methods=["GET"])
+def get_players_by_category():
+    """Get list of players grouped by category"""
+    try:
+        # Fetch all players with required fields
+        players = list(players_collection.find(
+            {},
+            {
+                "_id": 0,
+                "playerId": 1,
+                "playerName": 1,
+                "category": 1,
+                "batting.sr": 1,
+                "batting.runs": 1,
+                "bowling.sr": 1,
+                "bowling.wickets": 1
+            }
+        ))
+        
+        if not players:
+            return jsonify({
+                "status": "info",
+                "message": "No players found",
+                "data": {}
+            }), 200
+        
+        # Group players by category
+        grouped_players = {}
+        for player in players:
+            category = player.get("category", "uncategorized")
+            if category not in grouped_players:
+                grouped_players[category] = []
+            
+            grouped_players[category].append({
+                "playerId": player.get("playerId"),
+                "playerName": player.get("playerName"),
+                "category": category,
+                "batting": {
+                    "sr": player.get("batting", {}).get("sr"),
+                    "runs": player.get("batting", {}).get("runs")
+                },
+                "bowling": {
+                    "sr": player.get("bowling", {}).get("sr"),
+                    "wickets": player.get("bowling", {}).get("wickets")
+                }
+            })
+        
+        return jsonify({
+            "status": "success",
+            "message": f"Found {len(players)} player(s) across {len(grouped_players)} categor(ies)",
+            "data": grouped_players
+        }), 200
+        
+    except Exception as e:
+        return jsonify({"status": "error", "detail": f"Error fetching players by category: {str(e)}"}), 500
