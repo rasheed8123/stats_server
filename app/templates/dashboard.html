@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cricket Heroes - Player Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>🏏 Cricket Heroes - Player Dashboard</h1>
+            <p class="subtitle">Select and View Player Statistics</p>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Control Panel Section -->
+            <section class="panel control-panel">
+                <h2>Control Panel</h2>
+                <div class="panel-content">
+                    <label for="playerSelect">Select Player:</label>
+                    <div class="search-input-wrapper">
+                        <input 
+                            type="text" 
+                            id="searchInput" 
+                            placeholder="Search player by name..." 
+                            class="search-input"
+                        >
+                        <span class="loading-spinner" id="searchSpinner" style="display: none;">⏳</span>
+                    </div>
+                    
+                    <div id="playersList" class="players-list"></div>
+                    
+                    <div id="currentPlayer" class="current-player hidden">
+                        <h3>Current Selection</h3>
+                        <div id="currentPlayerDisplay"></div>
+                    </div>
+
+                    <!-- Error/Success Messages -->
+                    <div id="controlMessage" class="message hidden"></div>
+                </div>
+            </section>
+
+            <!-- Player Stats Section -->
+            <section class="panel stats-panel">
+                <h2>Player Statistics</h2>
+                <div class="panel-content">
+                    <div id="statsContainer" class="stats-container">
+                        <p class="placeholder-text">Select a player to view detailed statistics</p>
+                    </div>
+                    <div id="statsMessage" class="message hidden"></div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>&copy; 2026 Cricket Heroes Analytics | Powered by FastAPI</p>
+        </footer>
+    </div>
+
+    <script>
+        // API Configuration
+        const API_BASE = '/api';
+        const ADMIN_BASE = '/admin';
+
+        // Element References
+        const searchInput = document.getElementById('searchInput');
+        const playersList = document.getElementById('playersList');
+        const currentPlayerDisplay = document.getElementById('currentPlayerDisplay');
+        const currentPlayerSection = document.getElementById('currentPlayer');
+        const statsContainer = document.getElementById('statsContainer');
+        const controlMessage = document.getElementById('controlMessage');
+        const statsMessage = document.getElementById('statsMessage');
+        const searchSpinner = document.getElementById('searchSpinner');
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadCurrentPlayer();
+            setupEventListeners();
+        });
+
+        // Setup event listeners
+        function setupEventListeners() {
+            searchInput.addEventListener('input', debounce(handleSearch, 300));
+        }
+
+        // Debounce function for search
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        // Handle search input
+        async function handleSearch() {
+            const query = searchInput.value.trim();
+            
+            if (query.length < 2) {
+                playersList.innerHTML = '';
+                return;
+            }
+
+            showSpinner(true);
+            try {
+                const response = await fetch(`${API_BASE}/search?query=${encodeURIComponent(query)}`);
+                const result = await response.json();
+
+                if (response.ok && result.data.length > 0) {
+                    displayPlayersList(result.data);
+                } else {
+                    playersList.innerHTML = '<p class="no-results">No players found</p>';
+                }
+            } catch (error) {
+                showError(error.message, 'control');
+                playersList.innerHTML = '<p class="error-text">Error searching players</p>';
+            } finally {
+                showSpinner(false);
+            }
+        }
+
+        // Display players list
+        function displayPlayersList(players) {
+            playersList.innerHTML = players.map(player => `
+                <div class="player-item" onclick="selectPlayer('${player.playerId}', '${player.playerName}')">
+                    <div class="player-info">
+                        <strong>${player.playerName}</strong>
+                        <span class="player-meta">${player.role || 'N/A'} • ${player.team || 'N/A'}</span>
+                    </div>
+                    <span class="select-btn">→</span>
+                </div>
+            `).join('');
+        }
+
+        // Select a player
+        async function selectPlayer(playerId, playerName) {
+            try {
+                const response = await fetch(`${ADMIN_BASE}/select-player`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        playerId: playerId,
+                        playerName: playerName
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showSuccess(result.message, 'control');
+                    searchInput.value = '';
+                    playersList.innerHTML = '';
+                    loadCurrentPlayer();
+                    loadPlayerStats(playerId);
+                } else {
+                    showError(result.detail || 'Failed to select player', 'control');
+                }
+            } catch (error) {
+                showError(error.message, 'control');
+            }
+        }
+
+        // Load current player
+        async function loadCurrentPlayer() {
+            try {
+                const response = await fetch(`${ADMIN_BASE}/current-player`);
+                const result = await response.json();
+
+                if (result.data) {
+                    displayCurrentPlayer(result.data);
+                } else {
+                    currentPlayerSection.classList.add('hidden');
+                }
+            } catch (error) {
+                console.error('Error loading current player:', error);
+            }
+        }
+
+        // Display current player
+        function displayCurrentPlayer(player) {
+            currentPlayerSection.classList.remove('hidden');
+            currentPlayerDisplay.innerHTML = `
+                <div class="player-badge">
+                    <strong>${player.playerName}</strong> 
+                    <span class="player-id">(ID: ${player.playerId})</span>
+                </div>
+                <button class="btn btn-secondary" onclick="resetPlayer()">Reset Selection</button>
+            `;
+        }
+
+        // Load player stats
+        async function loadPlayerStats(playerId) {
+            try {
+                const response = await fetch(`${API_BASE}/player-stats/${playerId}`);
+                const result = await response.json();
+
+                if (response.ok && result.data) {
+                    displayPlayerStats(result.data);
+                } else {
+                    showError(result.detail || 'Failed to load player stats', 'stats');
+                }
+            } catch (error) {
+                showError(error.message, 'stats');
+            }
+        }
+
+        // Display player stats
+        function displayPlayerStats(player) {
+            let statsHtml = `
+                <div class="stats-header">
+                    <h3>${player.player_name}</h3>
+                </div>
+                <div class="stats-grid">
+            `;
+
+            // Iterate through player data and display as stats
+            for (const [key, value] of Object.entries(player)) {
+                if (key === 'player_name' || key === '_id') continue;
+                
+                if (typeof value === 'object') {
+                    statsHtml += `
+                        <div class="stat-item">
+                            <strong>${formatKey(key)}</strong>
+                            <pre class="stat-value">${JSON.stringify(value, null, 2)}</pre>
+                        </div>
+                    `;
+                } else {
+                    statsHtml += `
+                        <div class="stat-item">
+                            <strong>${formatKey(key)}</strong>
+                            <span class="stat-value">${value || 'N/A'}</span>
+                        </div>
+                    `;
+                }
+            }
+
+            statsHtml += '</div>';
+            statsContainer.innerHTML = statsHtml;
+        }
+
+        // Reset player selection
+        async function resetPlayer() {
+            try {
+                const response = await fetch(`${ADMIN_BASE}/reset-player`, {
+                    method: 'DELETE'
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showSuccess(result.message, 'control');
+                    currentPlayerSection.classList.add('hidden');
+                    statsContainer.innerHTML = '<p class="placeholder-text">Select a player to view detailed statistics</p>';
+                    searchInput.value = '';
+                } else {
+                    showError(result.detail || 'Failed to reset player', 'control');
+                }
+            } catch (error) {
+                showError(error.message, 'control');
+            }
+        }
+
+        // Format key names for display
+        function formatKey(key) {
+            return key
+                .replace(/_/g, ' ')
+                .replace(/\b\w/g, char => char.toUpperCase());
+        }
+
+        // Show success message
+        function showSuccess(message, section) {
+            const messageEl = section === 'control' ? controlMessage : statsMessage;
+            messageEl.textContent = message;
+            messageEl.className = 'message success';
+            setTimeout(() => messageEl.classList.add('hidden'), 4000);
+        }
+
+        // Show error message
+        function showError(message, section) {
+            const messageEl = section === 'control' ? controlMessage : statsMessage;
+            messageEl.textContent = '❌ ' + message;
+            messageEl.className = 'message error';
+            setTimeout(() => messageEl.classList.add('hidden'), 5000);
+        }
+
+        // Show/hide loading spinner
+        function showSpinner(show) {
+            searchSpinner.style.display = show ? 'inline-block' : 'none';
+        }
+    </script>
+</body>
+</html>
