@@ -432,24 +432,24 @@ def get_trending_players():
 
 Player: {player_details.get('playerName', 'N/A')}
 Most Asked Question: {most_asked_question}
-client = get_groq_client()
-                    if not client:
-                        most_asked_summary = "Groq client not initialized"
-                    else:
-                        summary_response = 
+
 Provide a 1-2 line insight about why this question is frequently asked about the player (max 150 characters):"""
                 
                 try:
-                    summary_response = groq_client.chat.completions.create(
-                        messages=[
-                            {
-                                "role": "user",
-                        )
+                    client = get_groq_client()
+                    if not client:
+                        most_asked_summary = "Groq client not initialized"
+                    else:
+                        summary_response = client.chat.completions.create(
+                            messages=[
+                                {
+                                    "role": "user",
+                                    "content": summary_prompt
                                 }
-                        ],
-                        model="llama-3.1-8b-instant"
-                    )
-                    most_asked_summary = summary_response.choices[0].message.content.strip()
+                            ],
+                            model="llama-3.1-8b-instant"
+                        )
+                        most_asked_summary = summary_response.choices[0].message.content.strip()
                 except Exception as groq_error:
                     most_asked_summary = f"Insight generation error: {str(groq_error)}"
             
