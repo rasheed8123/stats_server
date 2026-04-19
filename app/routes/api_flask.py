@@ -20,8 +20,14 @@ query_tracking_collection = db["query_tracking"]
 
 # Configure Groq API
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-if GROQ_API_KEY:
-    groq_client = Groq(api_key=GROQ_API_KEY)
+groq_client = None
+
+def get_groq_client():
+    """Lazy load Groq client to avoid initialization errors"""
+    global groq_client
+    if groq_client is None and GROQ_API_KEY:
+        groq_client = Groq(api_key=GROQ_API_KEY)
+    return groq_client
 
 
 @api_bp.route("/player-stats/<player_id>", methods=["GET"])
@@ -266,7 +272,11 @@ User Question: {user_query}
 Answer (max 200 characters):"""
         
         # Call Groq API
-        response = groq_client.chat.completions.create(
+        client = get_groq_client()
+        if not client:
+            return jsonify({"status": "error", "detail": "Groq client not initialized"}), 500
+        
+        response = client.chat.completions.create(
             messages=[
                 {
                     "role": "user",
@@ -422,7 +432,11 @@ def get_trending_players():
 
 Player: {player_details.get('playerName', 'N/A')}
 Most Asked Question: {most_asked_question}
-
+client = get_groq_client()
+                    if not client:
+                        most_asked_summary = "Groq client not initialized"
+                    else:
+                        summary_response = 
 Provide a 1-2 line insight about why this question is frequently asked about the player (max 150 characters):"""
                 
                 try:
@@ -430,8 +444,8 @@ Provide a 1-2 line insight about why this question is frequently asked about the
                         messages=[
                             {
                                 "role": "user",
-                                "content": summary_prompt
-                            }
+                        )
+                                }
                         ],
                         model="llama-3.1-8b-instant"
                     )
